@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { X, User, Stethoscope } from 'lucide-react'
+import { X, Stethoscope } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { supabase } from '../supabaseClient'
