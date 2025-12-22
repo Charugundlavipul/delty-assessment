@@ -1,0 +1,26 @@
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem;
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  text-align: center;
+}
+
+.card {
+  padding: 2rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+  margin-top: 2rem;
+  text-align: left;
+}
+
+.card h2 {
+    margin-top: 0;
+}
+
+pre {
+    background: #eee;
+    padding: 1rem;
+    border-radius: 4px;
+}
