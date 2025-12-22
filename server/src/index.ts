@@ -9,7 +9,16 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
-app.use(express.json());
+import patientRoutes from './routes/patients';
+import appointmentRoutes from './routes/appointments';
+import doctorRoutes from './routes/doctors';
+
+app.use(express.json()); // Ensure JSON parsing is enabled before routes
+app.use(cors());
+
+app.use('/api/patients', patientRoutes);
+app.use('/api/appointments', appointmentRoutes);
+app.use('/api/doctors', doctorRoutes);
 
 app.get('/', (req, res) => {
   res.send('Server is running');

@@ -1,47 +1,52 @@
 import { useEffect, useState } from 'react'
-import axios from 'axios'
-import './App.css'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { Toaster } from 'react-hot-toast'
+import { supabase } from './supabaseClient'
+import Auth from './pages/Auth'
+import Dashboard from './pages/Dashboard.tsx'
+import './index.css'
 
-function App() {
-  const [message, setMessage] = useState('Loading server status...')
-  const [dbData, setDbData] = useState<any>(null)
-  const [error, setError] = useState('')
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const [session, setSession] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Fetch from server root
-    axios.get('http://localhost:5000/')
-      .then(res => setMessage(res.data))
-      .catch(err => {
-        console.error(err)
-        setError('Failed to connect to server')
-      })
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      setLoading(false)
+    })
 
-    // Fetch from server DB test
-    axios.get('http://localhost:5000/api/test-db')
-      .then(res => setDbData(res.data))
-      .catch(err => {
-        console.error(err)
-        // If we get a response from the server, it means we connected to the API, 
-        // but the DB query failed.
-        if (err.response && err.response.data && err.response.data.error) {
-          setError(`Error: ${err.response.data.error}`)
-        } else {
-          // If no response, the server itself might be down or unreachable
-          setError('Failed to connect to server')
-        }
-      })
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
+  if (loading) return <div>Loading...</div>
+  if (!session) return <Navigate to="/auth" />
+
+  return <>{children}</>
+}
+
+function App() {
   return (
-    <div className="container">
-      <h1>Assessment Project</h1>
-      <div className="card">
-        <h2>System Status</h2>
-        <p><strong>Server:</strong> {error || message}</p>
-        <p><strong>Database:</strong> {dbData ? 'Connected' : (error || 'Not Connected (Check console)')}</p>
-        {dbData && <pre>{JSON.stringify(dbData, null, 2)}</pre>}
-      </div>
-    </div>
+    <Router>
+      <Toaster position="top-right" />
+      <Routes>
+        <Route path="/auth" element={<Auth />} />
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </Router>
   )
 }
 
