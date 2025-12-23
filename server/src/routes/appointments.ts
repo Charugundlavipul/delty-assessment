@@ -42,7 +42,7 @@ router.get('/', async (req: Request, res: Response) => {
     try {
         let query = scopedClient
             .from('appointments')
-            .select('*, patients (id, first_name, last_name, status, admit_type), cases (id, status, started_at)', { count: 'exact' })
+            .select('*, patients (id, first_name, last_name), cases (id, status, started_at)', { count: 'exact' })
             .range(offset, offset + limit - 1)
             .order('scheduled_at', { ascending: true });
 
@@ -125,7 +125,7 @@ router.post('/', async (req: Request, res: Response) => {
                 reason: validatedData.reason,
                 user_id: userId,
             })
-            .select('*, patients (id, first_name, last_name, status, admit_type), cases (id, status, started_at)')
+            .select('*, patients (id, first_name, last_name), cases (id, status, started_at)')
             .single();
 
         if (error) throw error;
@@ -154,7 +154,7 @@ router.put('/:id', async (req: Request, res: Response) => {
             .update(validatedData)
             .eq('id', id)
             .eq('user_id', (req as AuthRequest).user.id)
-            .select('*, patients (id, first_name, last_name, status, admit_type), cases (id, status, started_at)')
+            .select('*, patients (id, first_name, last_name), cases (id, status, started_at)')
             .single();
 
         if (error) throw error;
@@ -188,7 +188,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
             .update({ status })
             .eq('id', id)
             .eq('user_id', (req as AuthRequest).user.id)
-            .select('*, patients (id, first_name, last_name, status, admit_type), cases (id, status, started_at)')
+            .select('*, patients (id, first_name, last_name), cases (id, status, started_at)')
             .single();
 
         if (error) throw error;

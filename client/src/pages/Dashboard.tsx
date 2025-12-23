@@ -9,6 +9,7 @@ import DoctorProfileModal from '../components/DoctorProfileModal'
 import EmergencyAdmitModal from '../components/EmergencyAdmitModal'
 import CaseDetailsModal from '../components/CaseDetailsModal'
 import CreateCaseModal from '../components/CreateCaseModal'
+import EditCaseModal from '../components/EditCaseModal'
 
 // Helper to get API URL
 const getApiUrl = () => {
@@ -51,9 +52,10 @@ export default function Dashboard() {
         scheduled_at: '',
         reason: '',
     })
-    const [editingCaseId, setEditingCaseId] = useState<string | null>(null)
-    const [editingCaseField, setEditingCaseField] = useState<'status' | 'admit_type' | null>(null)
-    const [editingCaseValue, setEditingCaseValue] = useState('')
+
+    const [isEditCaseOpen, setIsEditCaseOpen] = useState(false)
+    const [editingCaseData, setEditingCaseData] = useState<any>(null)
+
     const [rescheduleId, setRescheduleId] = useState<string | null>(null)
     const [rescheduleValue, setRescheduleValue] = useState('')
 
@@ -195,56 +197,17 @@ export default function Dashboard() {
         }
     }
 
-    const handleCaseInlineUpdate = async (id: string, updates: { status?: string; admit_type?: string }) => {
-        try {
-            const headers = await getAuthHeaders()
-            if (!headers) return
-            await axios.put(`${getApiUrl()}/api/cases/${id}`, updates, { headers })
-            if (updates.status) {
-                toast.success(`Status updated to ${updates.status}`)
-            } else if (updates.admit_type) {
-                toast.success(`Admission set to ${updates.admit_type}`)
-            } else {
-                toast.success('Case updated')
-            }
-            fetchCases()
-            fetchStats()
-        } catch (error) {
-            console.error(error)
-            toast.error('Failed to update case')
-        }
-    }
-
-    const startCaseEdit = (caseItem: any, field: 'status' | 'admit_type') => {
-        setEditingCaseId(caseItem.id)
-        setEditingCaseField(field)
-        if (field === 'status') {
-            setEditingCaseValue(normalizeCaseStatus(caseItem.status) || 'Active')
-        } else {
-            setEditingCaseValue(caseItem.admit_type || 'Routine')
-        }
-    }
-
-    const cancelCaseEdit = () => {
-        setEditingCaseId(null)
-        setEditingCaseField(null)
-        setEditingCaseValue('')
-    }
-
-    const saveCaseEdit = async () => {
-        if (!editingCaseId || !editingCaseField) return
-        const updates = editingCaseField === 'status'
-            ? { status: editingCaseValue }
-            : { admit_type: editingCaseValue }
-        await handleCaseInlineUpdate(editingCaseId, updates)
-        cancelCaseEdit()
-    }
-
     const normalizeCaseStatus = (status?: string) => {
         if (!status) return 'Active'
         if (['Admitted', 'Critical', 'Stable', 'Discharged'].includes(status)) return 'Active'
         return status
     }
+
+    const handleEditCase = (caseItem: any) => {
+        setEditingCaseData(caseItem)
+        setIsEditCaseOpen(true)
+    }
+
 
     const handleCreateAppointment = async () => {
         if (!appointmentForm.patient_id || !appointmentForm.scheduled_at) {
@@ -485,14 +448,15 @@ export default function Dashboard() {
                                     onChange={(e) => { setPage(1); setSearch(e.target.value) }}
                                 />
                             </div>
-                        </div>
-                        <div className="w-full sm:w-56">
-                            <button
-                                onClick={() => { setSelectedPatient(null); setModalPreset(undefined); setPatientModalMode('create'); setIsModalOpen(true) }}
-                                className="w-full inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
-                            >
-                                Create Patient
-                            </button>
+                            <div className="flex-shrink-0">
+                                <button
+                                    onClick={() => { setSelectedPatient(null); setModalPreset(undefined); setPatientModalMode('create'); setIsModalOpen(true) }}
+                                    className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
+                                >
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Create Patient
+                                </button>
+                            </div>
                         </div>
 
 
@@ -660,93 +624,20 @@ export default function Dashboard() {
                                                     <div className="text-xs text-slate-500">{caseItem.diagnosis || caseItem.admit_reason || 'No case details'}</div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                    {editingCaseId === caseItem.id && editingCaseField === 'status' ? (
-                                                        <div className="flex items-center gap-2">
-                                                            <select
-                                                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
-                                                                value={editingCaseValue}
-                                                                onChange={(e) => setEditingCaseValue(e.target.value)}
-                                                            >
-                                                                <option value="Active">Active</option>
-                                                                <option value="Upcoming">Upcoming</option>
-                                                                <option value="Closed">Closed</option>
-                                                            </select>
-                                                            <button
-                                                                type="button"
-                                                                onClick={saveCaseEdit}
-                                                                className="rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
-                                                            >
-                                                                Save
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={cancelCaseEdit}
-                                                                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                                                            >
-                                                                Cancel
-                                                            </button>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="flex items-center gap-3">
-                                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${normalizeCaseStatus(caseItem.status) === 'Closed' ? 'bg-slate-100 text-slate-600 border-slate-200' :
-                                                                normalizeCaseStatus(caseItem.status) === 'Upcoming' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
-                                                                    'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                                                }`}>
-                                                                {normalizeCaseStatus(caseItem.status)}
-                                                            </span>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => startCaseEdit(caseItem, 'status')}
-                                                                className="text-xs font-semibold text-indigo-600 hover:text-indigo-500"
-                                                            >
-                                                                Edit
-                                                            </button>
-                                                        </div>
-                                                    )}
+                                                    <div className="flex items-center gap-3">
+                                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${normalizeCaseStatus(caseItem.status) === 'Closed' ? 'bg-slate-100 text-slate-600 border-slate-200' :
+                                                            normalizeCaseStatus(caseItem.status) === 'Upcoming' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                                                                'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                            }`}>
+                                                            {normalizeCaseStatus(caseItem.status)}
+                                                        </span>
+                                                    </div>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    {editingCaseId === caseItem.id && editingCaseField === 'admit_type' ? (
-                                                        <div className="flex items-center gap-2">
-                                                            <select
-                                                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
-                                                                value={editingCaseValue}
-                                                                onChange={(e) => setEditingCaseValue(e.target.value)}
-                                                            >
-                                                                <option value="Routine">Routine</option>
-                                                                <option value="Emergency">Emergency</option>
-                                                            </select>
-                                                            <button
-                                                                type="button"
-                                                                onClick={saveCaseEdit}
-                                                                className="rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
-                                                            >
-                                                                Save
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={cancelCaseEdit}
-                                                                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                                                            >
-                                                                Cancel
-                                                            </button>
-                                                        </div>
-                                                    ) : (
-                                                        <>
-                                                            <div className="flex items-center gap-3">
-                                                                <div className="text-sm text-slate-900">{caseItem.admit_type || 'Routine'}</div>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => startCaseEdit(caseItem, 'admit_type')}
-                                                                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-500"
-                                                                >
-                                                                    Edit
-                                                                </button>
-                                                            </div>
-                                                            <div className="text-xs text-slate-500 mt-1">
-                                                                {caseItem.started_at ? new Date(caseItem.started_at).toLocaleString() : 'No start time'}
-                                                            </div>
-                                                        </>
-                                                    )}
+                                                    <div className="text-sm text-slate-900">{caseItem.admit_type || 'Routine'}</div>
+                                                    <div className="text-xs text-slate-500 mt-1">
+                                                        {caseItem.started_at ? new Date(caseItem.started_at).toLocaleString() : 'No start time'}
+                                                    </div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                                     <div className="flex flex-wrap justify-end gap-2">
@@ -755,6 +646,12 @@ export default function Dashboard() {
                                                             className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                                                         >
                                                             Open case
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleEditCase(caseItem)}
+                                                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                                        >
+                                                            Edit Case
                                                         </button>
                                                         <button
                                                             onClick={() => navigate(`/patients/${caseItem.patient_id}`)}
@@ -1011,6 +908,13 @@ export default function Dashboard() {
                     />
                 )
             }
+
+            <EditCaseModal
+                isOpen={isEditCaseOpen}
+                onClose={() => setIsEditCaseOpen(false)}
+                onSuccess={handleCaseChange}
+                caseData={editingCaseData}
+            />
 
         </div >
     )

@@ -22,19 +22,6 @@ export default function CaseDetailsModal({ isOpen, onClose, caseId, onUpdated }:
     const [caseDetails, setCaseDetails] = useState<any>(null)
     const [noteText, setNoteText] = useState('')
     const [noteAppointmentId, setNoteAppointmentId] = useState<string>('case')
-    const [isEditing, setIsEditing] = useState(false)
-    const [editLoading, setEditLoading] = useState(false)
-    const [editFile, setEditFile] = useState<File | null>(null)
-    const [patientOptions, setPatientOptions] = useState<any[]>([])
-    const [patientOptionsLoading, setPatientOptionsLoading] = useState(false)
-    const [editForm, setEditForm] = useState({
-        patient_id: '',
-        status: 'Active',
-        admit_type: 'Routine',
-        admit_reason: '',
-        diagnosis: '',
-        started_at: '',
-    })
 
     const getAuthHeaders = async () => {
         const { data: { session } } = await supabase.auth.getSession()
@@ -42,49 +29,10 @@ export default function CaseDetailsModal({ isOpen, onClose, caseId, onUpdated }:
         return { Authorization: `Bearer ${session.access_token}` }
     }
 
-    const toInputDateTime = (value?: string | null) => {
-        if (!value) return ''
-        const date = new Date(value)
-        if (Number.isNaN(date.getTime())) return ''
-        const pad = (num: number) => String(num).padStart(2, '0')
-        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-    }
-
-
-
     const normalizeCaseStatus = (status?: string | null) => {
         if (!status) return 'Active'
         if (['Admitted', 'Unknown', 'Stable', 'Critical', 'Discharged'].includes(status)) return 'Active'
         return status
-    }
-
-    const hydrateEditForm = (caseData: any) => {
-        if (!caseData) return
-        setEditForm({
-            patient_id: caseData.patient_id || '',
-            status: normalizeCaseStatus(caseData.status),
-            admit_type: caseData.admit_type || 'Routine',
-            admit_reason: caseData.admit_reason || '',
-            diagnosis: caseData.diagnosis || '',
-            started_at: toInputDateTime(caseData.started_at),
-        })
-    }
-
-    const fetchPatientOptions = async () => {
-        setPatientOptionsLoading(true)
-        try {
-            const headers = await getAuthHeaders()
-            if (!headers) return
-            const res = await axios.get(`${getApiUrl()}/api/patients`, {
-                params: { page: 1, limit: 200, search: '' },
-                headers
-            })
-            setPatientOptions(res.data.data || [])
-        } catch (error) {
-            console.error(error)
-        } finally {
-            setPatientOptionsLoading(false)
-        }
     }
 
     const fetchProfile = async () => {
@@ -95,7 +43,6 @@ export default function CaseDetailsModal({ isOpen, onClose, caseId, onUpdated }:
             if (!headers) return
             const res = await axios.get(`${getApiUrl()}/api/cases/${caseId}`, { headers })
             setCaseDetails(res.data)
-            hydrateEditForm(res.data?.case)
             setNoteAppointmentId('case')
         } catch (error) {
             console.error(error)
@@ -108,87 +55,6 @@ export default function CaseDetailsModal({ isOpen, onClose, caseId, onUpdated }:
     useEffect(() => {
         if (isOpen) fetchProfile()
     }, [isOpen, caseId])
-
-    useEffect(() => {
-        if (!isOpen) {
-            setIsEditing(false)
-            setEditFile(null)
-            return
-        }
-        if (patientOptions.length === 0) {
-            fetchPatientOptions()
-        }
-    }, [isOpen])
-
-    const handleUpload = async () => {
-        if (!editFile) return null
-        const { data: { session } } = await supabase.auth.getSession()
-        if (!session || !session.user) return null
-        const fileName = `${session.user.id}/${Date.now()}_${editFile.name.replace(/[^a-zA-Z0-9.-]/g, '')}`
-        const { error } = await supabase.storage
-            .from('file_bucket')
-            .upload(fileName, editFile)
-        if (error) {
-            console.error(error)
-            toast.error('File upload failed')
-            return null
-        }
-        return fileName
-    }
-
-    const handleSaveCase = async () => {
-        if (!caseId) return
-        if (!editForm.patient_id) {
-            toast.error('Select a patient')
-            return
-        }
-        setEditLoading(true)
-        try {
-            const headers = await getAuthHeaders()
-            if (!headers) return
-
-            let attachmentPath: string | null = null
-            if (editFile) {
-                attachmentPath = await handleUpload()
-            }
-
-            const startedAt = editForm.started_at
-                ? new Date(editForm.started_at).toISOString()
-                : undefined
-
-
-
-            const payload: any = {
-                patient_id: editForm.patient_id,
-                status: editForm.status,
-                admit_type: editForm.admit_type,
-                admit_reason: editForm.admit_reason,
-                diagnosis: editForm.diagnosis,
-                started_at: startedAt,
-            }
-            if (attachmentPath) {
-                payload.attachment_url = attachmentPath
-            }
-
-            await axios.put(`${getApiUrl()}/api/cases/${caseId}`, payload, { headers })
-            toast.success('Case updated')
-            setIsEditing(false)
-            setEditFile(null)
-            fetchProfile()
-            onUpdated()
-        } catch (error) {
-            console.error(error)
-            toast.error('Failed to update case')
-        } finally {
-            setEditLoading(false)
-        }
-    }
-
-    const handleCancelEdit = () => {
-        hydrateEditForm(caseDetails?.case)
-        setEditFile(null)
-        setIsEditing(false)
-    }
 
     const handleDeleteCase = async () => {
         if (!caseId) return
@@ -248,18 +114,7 @@ export default function CaseDetailsModal({ isOpen, onClose, caseId, onUpdated }:
     const appointments = caseDetails?.appointments || []
     const notes = caseDetails?.notes || []
     const displayCaseStatus = normalizeCaseStatus(caseData?.status)
-    const patientOptionList = (() => {
-        const list = [...patientOptions]
-        if (patient && !list.some((option) => option.id === patient.id)) {
-            list.unshift({
-                id: patient.id,
-                first_name: patient.first_name,
-                last_name: patient.last_name,
-                status: patient.status,
-            })
-        }
-        return list
-    })()
+
 
     return (
         <Transition.Root show={isOpen} as={Fragment}>
@@ -294,22 +149,7 @@ export default function CaseDetailsModal({ isOpen, onClose, caseId, onUpdated }:
                                         Case Details
                                     </Dialog.Title>
                                     <div className="flex items-center gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                if (isEditing) {
-                                                    handleCancelEdit()
-                                                } else {
-                                                    setIsEditing(true)
-                                                    if (patientOptions.length === 0) {
-                                                        fetchPatientOptions()
-                                                    }
-                                                }
-                                            }}
-                                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                                        >
-                                            {isEditing ? 'Cancel edit' : 'Edit case'}
-                                        </button>
+
                                         {displayCaseStatus !== 'Closed' && (
                                             <button
                                                 type="button"
@@ -396,119 +236,7 @@ export default function CaseDetailsModal({ isOpen, onClose, caseId, onUpdated }:
                                             </div>
 
                                             <div className="lg:col-span-2 space-y-6">
-                                                {isEditing && (
-                                                    <div className="rounded-xl border border-slate-200 p-4">
-                                                        <p className="text-sm font-semibold text-slate-900 mb-3">Edit Case</p>
-                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                            <div className="sm:col-span-2">
-                                                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Patient</label>
-                                                                <select
-                                                                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 w-full"
-                                                                    value={editForm.patient_id}
-                                                                    onChange={(e) => {
-                                                                        const selectedId = e.target.value
-                                                                        setEditForm({
-                                                                            ...editForm,
-                                                                            patient_id: selectedId,
-                                                                        })
-                                                                    }}
-                                                                    disabled={patientOptionsLoading}
-                                                                >
-                                                                    <option value="">
-                                                                        {patientOptionsLoading ? 'Loading patients...' : 'Select a patient...'}
-                                                                    </option>
-                                                                    {patientOptionList.map((patientOption) => (
-                                                                        <option key={patientOption.id} value={patientOption.id}>
-                                                                            {patientOption.first_name} {patientOption.last_name}
-                                                                        </option>
-                                                                    ))}
-                                                                </select>
-                                                            </div>
 
-                                                            <div>
-                                                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Status</label>
-                                                                <select
-                                                                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 w-full"
-                                                                    value={editForm.status}
-                                                                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                                                                >
-                                                                    <option value="Active">Active</option>
-                                                                    <option value="Upcoming">Upcoming</option>
-                                                                    <option value="Closed">Closed</option>
-                                                                </select>
-                                                            </div>
-                                                            <div>
-                                                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Admission Type</label>
-                                                                <select
-                                                                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 w-full"
-                                                                    value={editForm.admit_type}
-                                                                    onChange={(e) => setEditForm({ ...editForm, admit_type: e.target.value })}
-                                                                >
-                                                                    <option value="Routine">Routine</option>
-                                                                    <option value="Emergency">Emergency</option>
-                                                                </select>
-                                                            </div>
-                                                            <div className="sm:col-span-2">
-                                                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Admission Reason</label>
-                                                                <input
-                                                                    type="text"
-                                                                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 w-full"
-                                                                    value={editForm.admit_reason}
-                                                                    onChange={(e) => setEditForm({ ...editForm, admit_reason: e.target.value })}
-                                                                    placeholder="e.g. Chest pain, High fever..."
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Case Date & Time</label>
-                                                                <input
-                                                                    type="datetime-local"
-                                                                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 w-full"
-                                                                    value={editForm.started_at}
-                                                                    onChange={(e) => setEditForm({ ...editForm, started_at: e.target.value })}
-                                                                    placeholder="dd-mm-yyyy --:--"
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Attachment</label>
-                                                                <input
-                                                                    type="file"
-                                                                    className="block w-full text-xs text-slate-600"
-                                                                    onChange={(e) => setEditFile(e.target.files?.[0] || null)}
-                                                                />
-                                                                {caseData?.attachment_path && !editFile && (
-                                                                    <p className="text-xs text-slate-500 mt-1">Current file: {caseData.attachment_path.split('/').pop()}</p>
-                                                                )}
-                                                            </div>
-                                                            <div className="sm:col-span-2">
-                                                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Diagnosis / Notes</label>
-                                                                <textarea
-                                                                    rows={3}
-                                                                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 w-full"
-                                                                    value={editForm.diagnosis}
-                                                                    onChange={(e) => setEditForm({ ...editForm, diagnosis: e.target.value })}
-                                                                    placeholder="Detailed case notes..."
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex justify-end gap-2 mt-4">
-                                                            <button
-                                                                type="button"
-                                                                onClick={handleCancelEdit}
-                                                                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                                                            >
-                                                                Cancel
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={handleSaveCase}
-                                                                disabled={editLoading}
-                                                                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
-                                                            >
-                                                                {editLoading ? 'Saving...' : 'Save changes'}
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                )}
                                                 {appointments.length > 0 && (
                                                     <div className="rounded-xl border border-slate-200">
                                                         <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-2">

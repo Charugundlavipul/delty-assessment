@@ -125,6 +125,14 @@ export default function PatientModal({ isOpen, onClose, patient, onSuccess, pres
                     last_name: formData.last_name,
                     dob: formData.dob,
                 }
+            } else if (mode === 'create') {
+                // Remove admission fields to prevent auto-creation of case
+                delete payload.admit_type
+                delete payload.admit_reason
+                delete payload.diagnosis
+                delete payload.attachment_url // Unless we want to allow attachment on creation? The UI hides it for create mode but check line 359
+                // Line 359 says mode !== 'create' && mode !== 'profile' for attachment. So it is hidden.
+                delete payload.attachment_url
             }
             if (patient) {
                 await axios.put(`${getApiUrl()}/api/patients/${patient.id}`, payload, {

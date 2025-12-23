@@ -48,7 +48,7 @@ router.get('/', async (req: Request, res: Response) => {
         query = query.eq('user_id', (req as AuthRequest).user.id);
 
         if (search) {
-            query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,diagnosis.ilike.%${search}%`);
+            query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%`);
         }
 
 
@@ -105,7 +105,7 @@ router.get('/stats', async (req: Request, res: Response) => {
         if (errors?.error) throw errors.error;
 
         const totalCount = totalPatients.count || 0;
-        const activeCount = (activeCases.count || 0) + (upcomingCases.count || 0);
+        const activeCount = activeCases.count || 0;
         const closedCount = closedCases.count || 0;
 
         res.json({
@@ -320,39 +320,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 
 
-/**
- * PATCH /api/patients/:id/case-status
- * Update patient case status only
- */
-router.patch('/:id/case-status', async (req: Request, res: Response) => {
-    const scopedClient = getScopedClient(req);
-    const caseSchema = z.object({
-        case_status: z.enum(['None', 'Active', 'Closed']),
-    });
 
-    try {
-        const { id } = req.params;
-        const { case_status } = caseSchema.parse(req.body);
-
-        const { data, error } = await scopedClient
-            .from('patients')
-            .update({ case_status })
-            .eq('id', id)
-            .eq('user_id', (req as AuthRequest).user.id)
-            .select()
-            .single();
-
-        if (error) throw error;
-        if (!data) return res.status(404).json({ error: 'Patient not found' });
-
-        res.json(data);
-    } catch (err: any) {
-        if (err instanceof ZodError) {
-            return res.status(400).json({ error: 'Validation Error', details: err.issues });
-        }
-        res.status(500).json({ error: err.message });
-    }
-});
 
 /**
  * PUT /api/patients/:id
