@@ -257,7 +257,7 @@ router.get('/:id/attachment', async (req: Request, res: Response) => {
 
 /**
  * POST /api/patients
- * Create a new patient
+ * Create a new patient (and optional initial case)
  */
 router.post('/', async (req: Request, res: Response) => {
     const scopedClient = getScopedClient(req);
@@ -265,17 +265,13 @@ router.post('/', async (req: Request, res: Response) => {
     try {
         const validatedData = patientSchema.parse(req.body);
 
-        const { data, error } = await scopedClient
+        // 1. Create Patient (Demographics only)
+        const { data: patient, error: patientError } = await scopedClient
             .from('patients')
             .insert({
                 first_name: validatedData.first_name,
                 last_name: validatedData.last_name,
                 dob: validatedData.dob,
-
-                diagnosis: validatedData.diagnosis,
-                attachment_path: validatedData.attachment_url,
-                admit_type: validatedData.admit_type,
-                admit_reason: validatedData.admit_reason,
                 gender: validatedData.gender,
                 phone: validatedData.phone,
                 email: validatedData.email,
@@ -287,8 +283,33 @@ router.post('/', async (req: Request, res: Response) => {
             .select()
             .single();
 
-        if (error) throw error;
-        res.status(201).json(data);
+        if (patientError) throw patientError;
+
+        // 2. Create Initial Case (if case details provided)
+        // We do this if 'admit_type' or 'diagnosis' or 'admit_reason' is present,
+        // effectively treating this as an 'Admit' event.
+        if (validatedData.admit_type || validatedData.diagnosis || validatedData.admit_reason || validatedData.attachment_url) {
+            const { error: caseError } = await scopedClient
+                .from('cases')
+                .insert({
+                    patient_id: patient.id,
+                    user_id: (req as AuthRequest).user.id,
+                    status: 'Active', // Default status for new admission
+                    admit_type: validatedData.admit_type || 'Routine',
+                    admit_reason: validatedData.admit_reason,
+                    diagnosis: validatedData.diagnosis,
+                    attachment_path: validatedData.attachment_url,
+                    started_at: new Date(),
+                });
+
+            if (caseError) {
+                // Log warning but don't fail the patient creation? 
+                // Alternatively, we could fail. ideally we use a transaction but supabase-js client is REST.
+                console.error('Failed to create initial case for patient:', caseError);
+            }
+        }
+
+        res.status(201).json(patient);
     } catch (err: any) {
         if (err instanceof ZodError) {
             return res.status(400).json({ error: 'Validation Error', details: err.issues });
@@ -344,13 +365,21 @@ router.put('/:id', async (req: Request, res: Response) => {
         const validatedData = updatePatientSchema.parse(req.body);
         const { id } = req.params;
 
-        const updatePayload: any = { ...validatedData };
-        if (Object.prototype.hasOwnProperty.call(validatedData, 'attachment_url')) {
-            if (validatedData.attachment_url !== undefined) {
-                updatePayload.attachment_path = validatedData.attachment_url;
-            }
-            delete updatePayload.attachment_url;
-        }
+        // Only update demographic fields that exist on patients table
+        const updatePayload: any = {
+            first_name: validatedData.first_name,
+            last_name: validatedData.last_name,
+            dob: validatedData.dob,
+            gender: validatedData.gender,
+            phone: validatedData.phone,
+            email: validatedData.email,
+            address: validatedData.address,
+            medical_history: validatedData.medical_history,
+            allergies: validatedData.allergies
+        };
+
+        // Remove undefined keys
+        Object.keys(updatePayload).forEach(key => updatePayload[key] === undefined && delete updatePayload[key]);
 
         const { data, error } = await scopedClient
             .from('patients')

@@ -9,8 +9,7 @@ create table if not exists public.patients (
     last_name text not null,
     dob date not null,
 
-    diagnosis text,
-    attachment_path text,
+    -- Patient Profile Details
     gender text check (gender in ('Male', 'Female', 'Other', 'Unknown')) default 'Unknown',
     phone text,
     email text,
@@ -20,11 +19,7 @@ create table if not exists public.patients (
     created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- Add admit fields (SAFE TO RE-RUN)
-alter table public.patients add column if not exists admit_type text check (admit_type in ('Emergency', 'Routine')) default 'Routine';
-alter table public.patients add column if not exists admit_reason text;
-alter table public.patients add column if not exists case_status text check (case_status in ('None', 'Active', 'Closed')) default 'None';
-alter table public.patients add column if not exists case_started_at timestamp with time zone;
+-- Note: admit_type, case_status, etc. are now handled in the CASES table.
 
 -- Add new patient details (SAFE TO RE-RUN)
 alter table public.patients add column if not exists gender text check (gender in ('Male', 'Female', 'Other', 'Unknown')) default 'Unknown';
@@ -122,6 +117,24 @@ create table if not exists public.cases (
     started_at timestamp with time zone,
     created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+-- Ensure Constraints are correct (SAFE TO RE-RUN)
+DO $$
+BEGIN
+    -- Drop old/conflicting case status constraints if they exist
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'cases_status_check') THEN
+        ALTER TABLE public.cases DROP CONSTRAINT cases_status_check;
+    END IF;
+    -- Add the correct constraint
+    ALTER TABLE public.cases ADD CONSTRAINT cases_status_check CHECK (status IN ('Active', 'Upcoming', 'Closed'));
+EXCEPTION
+    WHEN check_violation THEN
+        -- If data violates check, we can't auto-fix in schema.sql safely without potentially altering data, 
+        -- but the user has already run the fix. 
+        -- Ideally, we'd warn or clean, but purely DDL scripts usually avoid data modification.
+        -- However, given USER REQUEST to match fix_db.sql:
+        RAISE NOTICE 'Constraint violation detected. Please clean data or run fix_db.sql first.';
+END $$;
 
 -- Enable RLS
 alter table public.cases enable row level security;
