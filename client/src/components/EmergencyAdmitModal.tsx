@@ -68,26 +68,45 @@ export default function EmergencyAdmitModal({ isOpen, onClose, onSuccess, patien
             if (useExisting && existingId) {
                 await axios.put(`${getApiUrl()}/api/patients/${existingId}`, {
                     status: 'Critical',
+                }, {
+                    headers: { Authorization: `Bearer ${session.access_token}` }
+                })
+
+                await axios.post(`${getApiUrl()}/api/cases`, {
+                    patient_id: existingId,
+                    status: 'Active',
                     admit_type: 'Emergency',
                     admit_reason: formData.admit_reason,
+                    started_at: new Date().toISOString(),
                     attachment_url: attachmentPath || undefined,
                 }, {
                     headers: { Authorization: `Bearer ${session.access_token}` }
                 })
-                toast.success('Emergency admit updated')
+
+                toast.success('Emergency case created')
             } else {
-                await axios.post(`${getApiUrl()}/api/patients`, {
+                const createdPatient = await axios.post(`${getApiUrl()}/api/patients`, {
                     first_name: formData.first_name,
                     last_name: formData.last_name,
                     dob: formData.dob,
                     status: 'Critical',
-                    admit_type: 'Emergency',
-                    admit_reason: formData.admit_reason,
                     attachment_url: attachmentPath || undefined,
                 }, {
                     headers: { Authorization: `Bearer ${session.access_token}` }
                 })
-                toast.success('Emergency admit created')
+
+                await axios.post(`${getApiUrl()}/api/cases`, {
+                    patient_id: createdPatient.data.id,
+                    status: 'Active',
+                    admit_type: 'Emergency',
+                    admit_reason: formData.admit_reason,
+                    started_at: new Date().toISOString(),
+                    attachment_url: attachmentPath || undefined,
+                }, {
+                    headers: { Authorization: `Bearer ${session.access_token}` }
+                })
+
+                toast.success('Emergency case created')
             }
 
             onSuccess()

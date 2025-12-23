@@ -36,7 +36,6 @@ router.get('/', async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 5;
     const search = req.query.search as string;
-    const status = req.query.status as string | undefined;
     const offset = (page - 1) * limit;
 
     try {
@@ -51,9 +50,7 @@ router.get('/', async (req: Request, res: Response) => {
         if (search) {
             query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,diagnosis.ilike.%${search}%`);
         }
-        if (status && status !== 'All') {
-            query = query.eq('status', status);
-        }
+
 
         const { data, count, error } = await query;
 
@@ -69,6 +66,9 @@ router.get('/', async (req: Request, res: Response) => {
             },
         });
     } catch (err: any) {
+        // Debugging: Log error to file
+        const fs = require('fs');
+        fs.appendFileSync('error.log', new Date().toISOString() + ' - GET /api/patients error: ' + err.message + '\n' + JSON.stringify(err) + '\n');
         res.status(500).json({ error: err.message });
     }
 });
@@ -82,35 +82,36 @@ router.get('/stats', async (req: Request, res: Response) => {
 
     try {
         const userId = (req as AuthRequest).user.id;
-        const countQuery = (status?: string) => {
+        const caseCountQuery = (status?: string) => {
+            let q = scopedClient.from('cases').select('id', { count: 'exact', head: true }).eq('user_id', userId);
+            if (status) q = q.eq('status', status);
+            return q;
+        };
+
+        const patientCountQuery = (status?: string) => {
             let q = scopedClient.from('patients').select('id', { count: 'exact', head: true }).eq('user_id', userId);
             if (status) q = q.eq('status', status);
             return q;
         };
 
-        const [total, admitted, stable, critical, discharged] = await Promise.all([
-            countQuery(),
-            countQuery('Admitted'),
-            countQuery('Stable'),
-            countQuery('Critical'),
-            countQuery('Discharged'),
+        const [totalPatients, activeCases, upcomingCases, closedCases] = await Promise.all([
+            scopedClient.from('patients').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+            caseCountQuery('Active'),
+            caseCountQuery('Upcoming'),
+            caseCountQuery('Closed'),
         ]);
 
-        const errors = [total, admitted, stable, critical, discharged].find((r) => r.error);
+        const errors = [totalPatients, activeCases, upcomingCases, closedCases].find((r) => r.error);
         if (errors?.error) throw errors.error;
 
-        const totalCount = total.count || 0;
-        const dischargedCount = discharged.count || 0;
-        const activeCount = totalCount - dischargedCount;
+        const totalCount = totalPatients.count || 0;
+        const activeCount = (activeCases.count || 0) + (upcomingCases.count || 0);
+        const closedCount = closedCases.count || 0;
 
         res.json({
             total: totalCount,
-            admitted: admitted.count || 0,
-            stable: stable.count || 0,
-            critical: critical.count || 0,
-            discharged: dischargedCount,
-            active: activeCount < 0 ? 0 : activeCount,
-            closed: dischargedCount,
+            active: activeCount,
+            closed: closedCount,
         });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -140,23 +141,32 @@ router.get('/:id/profile', async (req: Request, res: Response) => {
 
         const { data: appointments, error: apptError } = await scopedClient
             .from('appointments')
-            .select('*')
+            .select('*, cases (id, status, started_at)')
             .eq('patient_id', id)
             .eq('user_id', userId)
             .order('scheduled_at', { ascending: false });
 
         if (apptError) throw apptError;
 
+        const { data: cases, error: caseError } = await scopedClient
+            .from('cases')
+            .select('*')
+            .eq('patient_id', id)
+            .eq('user_id', userId)
+            .order('started_at', { ascending: false });
+
+        if (caseError) throw caseError;
+
         const { data: notes, error: notesError } = await scopedClient
             .from('visit_notes')
-            .select('*, appointments (id, scheduled_at, status)')
+            .select('*, appointments (id, scheduled_at, status), cases (id, status, started_at)')
             .eq('patient_id', id)
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
 
         if (notesError) throw notesError;
 
-        res.json({ patient, appointments: appointments || [], notes: notes || [] });
+        res.json({ patient, appointments: appointments || [], cases: cases || [], notes: notes || [] });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }
@@ -261,11 +271,17 @@ router.post('/', async (req: Request, res: Response) => {
                 first_name: validatedData.first_name,
                 last_name: validatedData.last_name,
                 dob: validatedData.dob,
-                status: validatedData.status,
+
                 diagnosis: validatedData.diagnosis,
                 attachment_path: validatedData.attachment_url,
                 admit_type: validatedData.admit_type,
                 admit_reason: validatedData.admit_reason,
+                gender: validatedData.gender,
+                phone: validatedData.phone,
+                email: validatedData.email,
+                address: validatedData.address,
+                medical_history: validatedData.medical_history,
+                allergies: validatedData.allergies,
                 user_id: (req as AuthRequest).user.id,
             })
             .select()
@@ -281,23 +297,25 @@ router.post('/', async (req: Request, res: Response) => {
     }
 });
 
+
+
 /**
- * PATCH /api/patients/:id/status
- * Update patient status
+ * PATCH /api/patients/:id/case-status
+ * Update patient case status only
  */
-router.patch('/:id/status', async (req: Request, res: Response) => {
+router.patch('/:id/case-status', async (req: Request, res: Response) => {
     const scopedClient = getScopedClient(req);
-    const statusSchema = z.object({
-        status: z.enum(['Admitted', 'Discharged', 'Critical', 'Stable']),
+    const caseSchema = z.object({
+        case_status: z.enum(['None', 'Active', 'Closed']),
     });
 
     try {
         const { id } = req.params;
-        const { status } = statusSchema.parse(req.body);
+        const { case_status } = caseSchema.parse(req.body);
 
         const { data, error } = await scopedClient
             .from('patients')
-            .update({ status })
+            .update({ case_status })
             .eq('id', id)
             .eq('user_id', (req as AuthRequest).user.id)
             .select()

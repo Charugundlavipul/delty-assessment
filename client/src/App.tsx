@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast'
 import { supabase } from './supabaseClient'
 import Auth from './pages/Auth'
 import Dashboard from './pages/Dashboard.tsx'
+import PatientProfile from './pages/PatientProfile'
 import './index.css'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -42,6 +43,14 @@ function App() {
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patients/:id"
+          element={
+            <ProtectedRoute>
+              <PatientProfile />
             </ProtectedRoute>
           }
         />

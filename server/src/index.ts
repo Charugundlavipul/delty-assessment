@@ -12,6 +12,7 @@ app.use(cors());
 import patientRoutes from './routes/patients';
 import appointmentRoutes from './routes/appointments';
 import doctorRoutes from './routes/doctors';
+import caseRoutes from './routes/cases';
 
 app.use(express.json()); // Ensure JSON parsing is enabled before routes
 app.use(cors());
@@ -19,6 +20,7 @@ app.use(cors());
 app.use('/api/patients', patientRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/doctors', doctorRoutes);
+app.use('/api/cases', caseRoutes);
 
 app.get('/', (req, res) => {
   res.send('Server is running');

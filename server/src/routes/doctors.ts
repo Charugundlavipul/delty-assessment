@@ -66,6 +66,7 @@ router.put('/me', async (req: Request, res: Response) => {
                 display_name: displayName,
                 title: validated.title,
                 department: validated.department,
+                avatar_url: validated.avatar_url,
                 updated_at: new Date().toISOString(),
             })
             .select()

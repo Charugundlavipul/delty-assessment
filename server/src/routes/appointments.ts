@@ -42,7 +42,7 @@ router.get('/', async (req: Request, res: Response) => {
     try {
         let query = scopedClient
             .from('appointments')
-            .select('*, patients (id, first_name, last_name, status, admit_type)', { count: 'exact' })
+            .select('*, patients (id, first_name, last_name, status, admit_type), cases (id, status, started_at)', { count: 'exact' })
             .range(offset, offset + limit - 1)
             .order('scheduled_at', { ascending: true });
 
@@ -83,17 +83,49 @@ router.post('/', async (req: Request, res: Response) => {
 
     try {
         const validatedData = appointmentSchema.parse(req.body);
+        const userId = (req as AuthRequest).user.id;
+
+        let caseId = validatedData.case_id;
+        if (caseId) {
+            const { data: existingCase, error: caseError } = await scopedClient
+                .from('cases')
+                .select('id')
+                .eq('id', caseId)
+                .eq('patient_id', validatedData.patient_id)
+                .eq('user_id', userId)
+                .single();
+
+            if (caseError) throw caseError;
+            if (!existingCase) return res.status(404).json({ error: 'Case not found' });
+        } else {
+            const { data: createdCase, error: caseError } = await scopedClient
+                .from('cases')
+                .insert({
+                    patient_id: validatedData.patient_id,
+                    status: 'Upcoming',
+                    admit_type: 'Routine',
+                    admit_reason: validatedData.reason,
+                    started_at: validatedData.scheduled_at,
+                    user_id: userId,
+                })
+                .select('id')
+                .single();
+
+            if (caseError) throw caseError;
+            caseId = createdCase.id;
+        }
 
         const { data, error } = await scopedClient
             .from('appointments')
             .insert({
                 patient_id: validatedData.patient_id,
+                case_id: caseId,
                 scheduled_at: validatedData.scheduled_at,
                 status: validatedData.status || 'Scheduled',
                 reason: validatedData.reason,
-                user_id: (req as AuthRequest).user.id,
+                user_id: userId,
             })
-            .select('*, patients (id, first_name, last_name, status, admit_type)')
+            .select('*, patients (id, first_name, last_name, status, admit_type), cases (id, status, started_at)')
             .single();
 
         if (error) throw error;
@@ -122,7 +154,7 @@ router.put('/:id', async (req: Request, res: Response) => {
             .update(validatedData)
             .eq('id', id)
             .eq('user_id', (req as AuthRequest).user.id)
-            .select('*, patients (id, first_name, last_name, status, admit_type)')
+            .select('*, patients (id, first_name, last_name, status, admit_type), cases (id, status, started_at)')
             .single();
 
         if (error) throw error;
@@ -156,7 +188,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
             .update({ status })
             .eq('id', id)
             .eq('user_id', (req as AuthRequest).user.id)
-            .select('*, patients (id, first_name, last_name, status, admit_type)')
+            .select('*, patients (id, first_name, last_name, status, admit_type), cases (id, status, started_at)')
             .single();
 
         if (error) throw error;

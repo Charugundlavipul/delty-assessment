@@ -17,10 +17,9 @@ interface PatientModalProps {
     patient?: any
     onSuccess: () => void
     preset?: {
-        status?: 'Admitted' | 'Stable' | 'Critical' | 'Discharged'
         admit_type?: 'Emergency' | 'Routine'
     }
-    mode?: 'create' | 'edit'
+    mode?: 'create' | 'edit' | 'admit' | 'profile'
 }
 
 export default function PatientModal({ isOpen, onClose, patient, onSuccess, preset, mode = 'edit' }: PatientModalProps) {
@@ -29,8 +28,14 @@ export default function PatientModal({ isOpen, onClose, patient, onSuccess, pres
         first_name: '',
         last_name: '',
         dob: '',
-        status: 'Admitted',
+        gender: 'Unknown',
+        phone: '',
+        email: '',
+        address: '',
+
         diagnosis: '',
+        medical_history: '',
+        allergies: '',
         attachment_url: '',
         admit_type: 'Routine',
         admit_reason: ''
@@ -43,8 +48,14 @@ export default function PatientModal({ isOpen, onClose, patient, onSuccess, pres
                 first_name: patient.first_name,
                 last_name: patient.last_name,
                 dob: patient.dob ? patient.dob.split('T')[0] : '',
-                status: patient.status,
+                gender: patient.gender || 'Unknown',
+                phone: patient.phone || '',
+                email: patient.email || '',
+                address: patient.address || '',
+
                 diagnosis: patient.diagnosis || '',
+                medical_history: patient.medical_history || '',
+                allergies: patient.allergies || '',
                 attachment_url: patient.attachment_path || '',
                 admit_type: patient.admit_type || 'Routine',
                 admit_reason: patient.admit_reason || ''
@@ -55,8 +66,14 @@ export default function PatientModal({ isOpen, onClose, patient, onSuccess, pres
                 first_name: '',
                 last_name: '',
                 dob: '',
-                status: preset?.status || (mode === 'create' ? 'Stable' : 'Admitted'),
+                gender: 'Unknown',
+                phone: '',
+                email: '',
+                address: '',
+
                 diagnosis: '',
+                medical_history: '',
+                allergies: '',
                 attachment_url: '',
                 admit_type: preset?.admit_type || 'Routine',
                 admit_reason: ''
@@ -100,8 +117,15 @@ export default function PatientModal({ isOpen, onClose, patient, onSuccess, pres
                 if (path) attachmentPath = path
             }
 
-            const payload = { ...formData, attachment_url: attachmentPath }
-
+            let payload: any = { ...formData, attachment_url: attachmentPath }
+            if (!payload.email) delete payload.email
+            if (mode === 'profile') {
+                payload = {
+                    first_name: formData.first_name,
+                    last_name: formData.last_name,
+                    dob: formData.dob,
+                }
+            }
             if (patient) {
                 await axios.put(`${getApiUrl()}/api/patients/${patient.id}`, payload, {
                     headers: { Authorization: `Bearer ${session.access_token}` }
@@ -171,7 +195,7 @@ export default function PatientModal({ isOpen, onClose, patient, onSuccess, pres
                                         <div className="bg-indigo-100 p-1.5 rounded-lg">
                                             {patient ? <Stethoscope className="h-5 w-5 text-indigo-600" /> : <User className="h-5 w-5 text-indigo-600" />}
                                         </div>
-                                        {patient ? 'Update Medical Record' : (mode === 'create' ? 'Create Patient' : 'Admit New Patient')}
+                                        {patient ? (mode === 'profile' ? 'Edit Patient Profile' : mode === 'admit' ? 'Create Case' : 'Update Medical Record') : (mode === 'create' ? 'Create Patient' : 'Admit New Patient')}
                                     </Dialog.Title>
                                     <button
                                         type="button"
@@ -184,7 +208,7 @@ export default function PatientModal({ isOpen, onClose, patient, onSuccess, pres
 
                                 {/* Body */}
                                 <form onSubmit={handleSubmit}>
-                                    <div className="px-6 py-6 space-y-5">
+                                    <div className="px-6 py-6 space-y-5 max-h-[70vh] overflow-y-auto">
                                         <div className="grid grid-cols-2 gap-5">
                                             <div>
                                                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">First Name</label>
@@ -208,7 +232,7 @@ export default function PatientModal({ isOpen, onClose, patient, onSuccess, pres
                                             </div>
                                         </div>
 
-                                        <div className={`grid grid-cols-2 gap-5 ${mode === 'create' ? 'sm:grid-cols-1' : ''}`}>
+                                        <div className={`grid grid-cols-2 gap-5 ${mode === 'create' || mode === 'profile' ? 'sm:grid-cols-1' : ''}`}>
                                             <div>
                                                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Date of Birth</label>
                                                 <input
@@ -219,24 +243,58 @@ export default function PatientModal({ isOpen, onClose, patient, onSuccess, pres
                                                     onChange={e => setFormData({ ...formData, dob: e.target.value })}
                                                 />
                                             </div>
-                                            {mode !== 'create' && (
-                                                <div>
-                                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Initial Status</label>
-                                                    <select
-                                                        className="block w-full rounded-xl border-slate-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2.5 bg-slate-50 min-h-[42px]"
-                                                        value={formData.status}
-                                                        onChange={e => setFormData({ ...formData, status: e.target.value })}
-                                                    >
-                                                        <option value="Admitted">Admitted (Pending)</option>
-                                                        <option value="Stable">Stable</option>
-                                                        <option value="Critical">Critical</option>
-                                                        <option value="Discharged">Discharged</option>
-                                                    </select>
-                                                </div>
-                                            )}
+                                            <div>
+                                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Gender</label>
+                                                <select
+                                                    className="block w-full rounded-xl border-slate-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2.5 bg-slate-50 min-h-[42px]"
+                                                    value={formData.gender}
+                                                    onChange={e => setFormData({ ...formData, gender: e.target.value })}
+                                                >
+                                                    <option value="Unknown">Select...</option>
+                                                    <option value="Male">Male</option>
+                                                    <option value="Female">Female</option>
+                                                    <option value="Other">Other</option>
+                                                </select>
+                                            </div>
                                         </div>
 
-                                        {mode !== 'create' && (
+                                        <div className="grid grid-cols-2 gap-5">
+                                            <div className="col-span-1">
+                                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Phone</label>
+                                                <input
+                                                    type="tel"
+                                                    className="block w-full rounded-xl border-slate-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2.5 bg-slate-50 min-h-[42px]"
+                                                    value={formData.phone}
+                                                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                                                    placeholder="(555) 123-4567"
+                                                />
+                                            </div>
+                                            <div className="col-span-1">
+                                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Email</label>
+                                                <input
+                                                    type="email"
+                                                    className="block w-full rounded-xl border-slate-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2.5 bg-slate-50 min-h-[42px]"
+                                                    value={formData.email}
+                                                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                                                    placeholder="patient@example.com"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Address</label>
+                                            <input
+                                                type="text"
+                                                className="block w-full rounded-xl border-slate-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2.5 bg-slate-50 min-h-[42px]"
+                                                value={formData.address}
+                                                onChange={e => setFormData({ ...formData, address: e.target.value })}
+                                                placeholder="123 Main St, City, State"
+                                            />
+                                        </div>
+
+                                        <div className="border-t border-slate-100 pt-5"></div>
+
+                                        {mode !== 'create' && mode !== 'profile' && (
                                             <div className="grid grid-cols-2 gap-5">
                                                 <div>
                                                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Admission Type</label>
@@ -275,7 +333,30 @@ export default function PatientModal({ isOpen, onClose, patient, onSuccess, pres
                                             </div>
                                         )}
 
-                                        {mode !== 'create' && (
+                                        <div className="grid grid-cols-2 gap-5">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Medical History</label>
+                                                <textarea
+                                                    rows={3}
+                                                    className="block w-full rounded-xl border-slate-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm bg-slate-50 p-3"
+                                                    placeholder="Past conditions, surgeries..."
+                                                    value={formData.medical_history}
+                                                    onChange={e => setFormData({ ...formData, medical_history: e.target.value })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Allergies</label>
+                                                <textarea
+                                                    rows={3}
+                                                    className="block w-full rounded-xl border-slate-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm bg-slate-50 p-3"
+                                                    placeholder="e.g. Penicillin, Peanuts"
+                                                    value={formData.allergies}
+                                                    onChange={e => setFormData({ ...formData, allergies: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {mode !== 'create' && mode !== 'profile' && (
                                             <div>
                                                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Attachment (Optional)</label>
                                                 <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-slate-200 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
@@ -335,7 +416,7 @@ export default function PatientModal({ isOpen, onClose, patient, onSuccess, pres
                         </Transition.Child>
                     </div>
                 </div>
-            </Dialog>
-        </Transition.Root>
+            </Dialog >
+        </Transition.Root >
     )
 }

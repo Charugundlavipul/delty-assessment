@@ -4,4 +4,5 @@ export const doctorProfileSchema = z.object({
     display_name: z.string().optional(),
     title: z.string().optional(),
     department: z.string().optional(),
+    avatar_url: z.string().optional(),
 });
