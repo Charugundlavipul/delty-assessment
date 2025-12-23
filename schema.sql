@@ -276,6 +276,7 @@ create table if not exists public.doctors (
 
 -- Allow optional display name (SAFE TO RE-RUN)
 alter table public.doctors alter column display_name drop not null;
+alter table public.doctors add column if not exists avatar_url text;
 
 -- Enable RLS
 alter table public.doctors enable row level security;
